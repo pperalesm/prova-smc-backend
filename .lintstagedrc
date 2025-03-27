@@ -1,0 +1,9 @@
+{
+  "{src,apps,libs,test}/**/*.{json,html,css,scss,less,yaml,md}": [
+    "npx prettier --write"
+  ],
+  "{src,apps,libs,test}/**/*.{ts,js,tsx,jsx}": [
+    "npx eslint --fix --max-warnings 0",
+    "npx prettier --write"
+  ]
+}
