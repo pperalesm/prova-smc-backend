@@ -1,6 +1,12 @@
 import { HttpServer, INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { TestUtils } from "../../test-utils";
+import { Test } from "@nestjs/testing";
+import { HttpService } from "@nestjs/axios";
+import { AppModule } from "../../../src/app.module";
+import { of } from "rxjs";
+import { AxiosResponse } from "axios";
+import { locations } from "./locations";
 
 describe("/locations (GET)", () => {
   let app: INestApplication;
@@ -9,8 +15,28 @@ describe("/locations (GET)", () => {
   const url = "/locations";
 
   beforeEach(async () => {
-    app = await TestUtils.setUp();
+    const moduleFixture = await Test.createTestingModule({
+      imports: [AppModule],
+      providers: [
+        {
+          provide: HttpService,
+          useFactory: () => ({
+            get: jest.fn(),
+          }),
+        },
+      ],
+    }).compile();
+
+    app = await TestUtils.setUp(moduleFixture);
     server = app.getHttpServer();
+
+    const httpService = moduleFixture.get(HttpService);
+
+    jest.spyOn(httpService, "get").mockReturnValue(
+      of({
+        data: locations,
+      } as AxiosResponse),
+    );
   });
 
   afterEach(async () => {

@@ -5,13 +5,23 @@ import { AppModule } from "../src/app.module";
 expect.extend(matchers);
 
 export class TestUtils {
+  static get dailyVariableStructure() {
+    return {
+      maxTemperature: expect.toBeOneOf([expect.any(Number), undefined]),
+      minTemperature: expect.toBeOneOf([expect.any(Number), undefined]),
+      precipitationProbability: expect.toBeOneOf([
+        expect.any(Number),
+        undefined,
+      ]),
+      dateString: expect.any(String),
+    };
+  }
+
   static get locationStructure() {
     return {
-      role: expect.any(String),
-      nickname: expect.toBeOneOf([expect.any(String), null]),
-      avatarUri: expect.any(String),
-      reputation: expect.any(Number),
-      popularity: expect.any(Number),
+      code: expect.any(String),
+      name: expect.any(String),
+      dailyVariables: expect.any(Array),
     };
   }
 
@@ -22,10 +32,12 @@ export class TestUtils {
     };
   }
 
-  static async setUp() {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+  static async setUp(moduleFixture?: TestingModule) {
+    if (!moduleFixture) {
+      moduleFixture = await Test.createTestingModule({
+        imports: [AppModule],
+      }).compile();
+    }
 
     const app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
