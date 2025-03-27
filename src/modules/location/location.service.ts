@@ -10,17 +10,15 @@ import { HttpService } from "@nestjs/axios";
 import { catchError, firstValueFrom } from "rxjs";
 import { AxiosError } from "axios";
 import {
-  LocationApiResponseInterface,
   LOCATIONS_API_URL,
   LOCATION_LOGGER_CONTEXT,
   CATALAN_LOCALE,
-  LocationVariableEnum,
-  LOCATION_VARIABLE_API_URL,
-  LocationVariableApiResponseInterface,
-  API_VARIABLE_PLACEHOLDER,
-  API_DAY_PLACEHOLDER,
-  LOCATIONS_API_NOT_FOUND_MESSAGE,
-  LOCATIONS_API_GENERIC_ERROR_MESSAGE,
+  VariableBucketEnum,
+  VARIABLES_API_URL,
+  VARIABLE_BUCKET_URL_PLACEHOLDER,
+  DAY_URL_PLACEHOLDER,
+  SMC_API_NOT_FOUND_MESSAGE,
+  SMC_API_GENERIC_ERROR_MESSAGE,
   LOCATION_NOT_FOUND_MESSAGE,
   NUM_DAYS_WITH_VARIABLE_DATA,
   CATALAN_TIMEZONE,
@@ -29,6 +27,7 @@ import {
   VARIABLES_CACHE_TTL,
   LOCATIONS_CACHE_KEY,
   VARIABLES_CACHE_KEY,
+  VARIABLE_BUCKET_TO_FIELDS,
 } from "./location.constants";
 import { Logger } from "@nestjs/common";
 import { ShortLocationDto } from "./dto/output/short-location.dto";
@@ -38,6 +37,12 @@ import { LocationDto } from "./dto/output/location.dto";
 import { Utils } from "../../common/utils";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Cache } from "cache-manager";
+import {
+  DailyVariableInterface,
+  LocationApiResponseInterface,
+  VariableApiResponseInterface,
+  VariableDataInterface,
+} from "./location.interfaces";
 
 @Injectable()
 export class LocationService {
@@ -61,30 +66,24 @@ export class LocationService {
           location.nom.includes(dto.name.toLocaleLowerCase(CATALAN_LOCALE))),
     );
 
-    const resultLocations = filteredLocations
+    const paginatedLocations = filteredLocations
       .slice(dto.skip, dto.skip + dto.take)
       .sort((a, b) => a.nom!.localeCompare(b.nom!, CATALAN_LOCALE))
       .map((location) => new ShortLocationDto(location.codi!, location.nom!));
 
     return new PageDto<ShortLocationDto>(
-      resultLocations,
+      paginatedLocations,
       new PageMetaDto(dto, filteredLocations.length),
     );
   }
 
   async readOne(code: string): Promise<LocationDto> {
-    const [
-      locationsData,
-      maxTemperatureData,
-      minTemperatureData,
-      precipitationProbabilityData,
-    ] = await Promise.all([
+    const variableBuckets = Object.values(VariableBucketEnum);
+
+    const [locationsData, ...allVariableData] = await Promise.all([
       this.getLocationsData(),
-      this.getVariableData(code, LocationVariableEnum.MAX_TEMPERATURE),
-      this.getVariableData(code, LocationVariableEnum.MIN_TEMPERATURE),
-      this.getVariableData(
-        code,
-        LocationVariableEnum.PRECIPITATION_PROBABILITY,
+      ...variableBuckets.map((variableBucket) =>
+        this.getVariableData(code, variableBucket),
       ),
     ]);
 
@@ -94,102 +93,94 @@ export class LocationService {
       throw new NotFoundException(LOCATION_NOT_FOUND_MESSAGE);
     }
 
-    const dailyVariables: {
-      dateString: string;
-      maxTemperature?: number;
-      minTemperature?: number;
-      precipitationProbability?: number;
-    }[] = [];
+    const dailyVariables: DailyVariableInterface[] = [];
 
     const dateToDayNumber = Utils.getNextXDates(
       new Date(),
       NUM_DAYS_WITH_VARIABLE_DATA,
     ).reduce((result, date, i) => {
-      const dateString = date.toLocaleDateString(CATALAN_LOCALE, {
-        timeZone: CATALAN_TIMEZONE,
-      });
+      const dayDateString = Utils.getDateStringAtTimeZone(
+        date,
+        CATALAN_LOCALE,
+        CATALAN_TIMEZONE,
+      );
 
-      dailyVariables.push({ dateString });
+      dailyVariables.push({ dateString: dayDateString });
 
-      result.set(dateString, i + 1);
+      result.set(dayDateString, i + 1);
 
       return result;
     }, new Map<string, number>());
 
-    this.getValuesFromVariableData(
-      LocationVariableEnum.MAX_TEMPERATURE,
-      maxTemperatureData,
-      dateToDayNumber,
-      dailyVariables,
-    );
-
-    this.getValuesFromVariableData(
-      LocationVariableEnum.MIN_TEMPERATURE,
-      minTemperatureData,
-      dateToDayNumber,
-      dailyVariables,
-    );
-
-    this.getValuesFromVariableData(
-      LocationVariableEnum.PRECIPITATION_PROBABILITY,
-      precipitationProbabilityData,
-      dateToDayNumber,
-      dailyVariables,
-    );
+    variableBuckets.forEach((variableBucket, index) => {
+      this.getValuesFromVariableData(
+        variableBucket,
+        allVariableData[index],
+        dateToDayNumber,
+        dailyVariables,
+      );
+    });
 
     return new LocationDto(code, location.nom, dailyVariables);
   }
 
   getValuesFromVariableData(
-    variable: LocationVariableEnum,
-    variableData: { value?: number; date?: string }[],
+    variable: VariableBucketEnum,
+    variableData: VariableDataInterface[],
     dateToDayNumber: Map<string, number>,
-    dailyVariables: {
-      dateString: string;
-      maxTemperature?: number;
-      minTemperature?: number;
-      precipitationProbability?: number;
-    }[],
+    dailyVariables: DailyVariableInterface[],
   ): void {
     for (const item of variableData) {
       if (!item.date) {
         continue;
       }
 
-      const dateString = new Date(item.date).toLocaleDateString(
+      const itemDateString = Utils.getDateStringAtTimeZone(
+        item.date,
         CATALAN_LOCALE,
-        {
-          timeZone: UTC_TIMEZONE,
-        },
+        UTC_TIMEZONE,
       );
 
-      if (!dateToDayNumber.has(dateString)) {
+      if (!dateToDayNumber.has(itemDateString)) {
         continue;
       }
 
-      const dayNumber = dateToDayNumber.get(dateString)!;
+      const valueField = VARIABLE_BUCKET_TO_FIELDS.get(variable)!.valueField;
 
-      switch (variable) {
-        case LocationVariableEnum.MAX_TEMPERATURE:
-          dailyVariables[dayNumber - 1].maxTemperature = item.value;
-          break;
-        case LocationVariableEnum.MIN_TEMPERATURE:
-          dailyVariables[dayNumber - 1].minTemperature = item.value;
-          break;
-        case LocationVariableEnum.PRECIPITATION_PROBABILITY:
-          dailyVariables[dayNumber - 1].precipitationProbability = item.value;
-          break;
+      const deliveryDateField =
+        VARIABLE_BUCKET_TO_FIELDS.get(variable)!.deliveryDateField;
+
+      const dailyVariable =
+        dailyVariables[dateToDayNumber.get(itemDateString)! - 1];
+
+      const todayDateString = dailyVariables[0].dateString;
+
+      const itemDeliveryDateString = item.deliveryDate
+        ? Utils.getDateStringAtTimeZone(
+            item.deliveryDate,
+            CATALAN_LOCALE,
+            UTC_TIMEZONE,
+          )
+        : undefined;
+
+      const isAReliableUpdate =
+        dailyVariable[deliveryDateField] !== todayDateString &&
+        itemDeliveryDateString === todayDateString;
+
+      if (dailyVariable[valueField] == undefined || isAReliableUpdate) {
+        dailyVariable[valueField] = item.value;
+        dailyVariable[deliveryDateField] = itemDeliveryDateString;
       }
     }
   }
 
   async getVariableData(
     code: string,
-    variable: LocationVariableEnum,
-  ): Promise<{ value?: number; date?: string }[]> {
+    variableBucket: VariableBucketEnum,
+  ): Promise<VariableDataInterface[]> {
     return Promise.all(
       Array.from({ length: NUM_DAYS_WITH_VARIABLE_DATA }, (_, i) =>
-        this.getVariableDataForDay(code, i + 1, variable),
+        this.getVariableDataForDay(code, i + 1, variableBucket),
       ),
     );
   }
@@ -197,23 +188,20 @@ export class LocationService {
   async getVariableDataForDay(
     code: string,
     day: number,
-    variable: LocationVariableEnum,
-  ): Promise<{
-    value?: number;
-    date?: string;
-  }> {
+    variableBucket: VariableBucketEnum,
+  ): Promise<VariableDataInterface> {
     return Utils.withCache(
       this.cacheManager,
-      VARIABLES_CACHE_KEY + code + variable + day,
+      VARIABLES_CACHE_KEY + code + variableBucket + day,
       VARIABLES_CACHE_TTL,
       async () => {
         const { data } = await firstValueFrom(
           this.httpService
-            .get<LocationVariableApiResponseInterface>(
-              LOCATION_VARIABLE_API_URL.replaceAll(
-                API_VARIABLE_PLACEHOLDER,
-                variable,
-              ).replaceAll(API_DAY_PLACEHOLDER, day.toString()),
+            .get<VariableApiResponseInterface>(
+              VARIABLES_API_URL.replaceAll(
+                VARIABLE_BUCKET_URL_PLACEHOLDER,
+                variableBucket,
+              ).replaceAll(DAY_URL_PLACEHOLDER, day.toString()),
             )
             .pipe(
               catchError((error: AxiosError) => {
@@ -229,6 +217,7 @@ export class LocationService {
         return {
           value: locationData?.valors?.[0]?.valor,
           date: locationData?.valors?.[0]?.data,
+          deliveryDate: data.dataSortida,
         };
       },
     );
@@ -259,11 +248,9 @@ export class LocationService {
     this.logger.error(error);
 
     if (error.response?.status === 404) {
-      return new NotFoundException(LOCATIONS_API_NOT_FOUND_MESSAGE);
+      return new NotFoundException(SMC_API_NOT_FOUND_MESSAGE);
     }
 
-    return new InternalServerErrorException(
-      LOCATIONS_API_GENERIC_ERROR_MESSAGE,
-    );
+    return new InternalServerErrorException(SMC_API_GENERIC_ERROR_MESSAGE);
   }
 }

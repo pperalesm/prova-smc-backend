@@ -1,22 +1,14 @@
+import { DailyVariableInterface } from "../../location.interfaces";
+
 export class LocationDto {
   code: string;
   name: string;
-  dailyVariables: {
-    maxTemperature?: number;
-    minTemperature?: number;
-    precipitationProbability?: number;
-    dateString: string;
-  }[];
+  dailyVariables: DailyVariableInterface[];
 
   constructor(
     code: string,
     name: string,
-    dailyVariables: {
-      maxTemperature?: number;
-      minTemperature?: number;
-      precipitationProbability?: number;
-      dateString: string;
-    }[],
+    dailyVariables: DailyVariableInterface[],
   ) {
     this.code = code;
     this.name = name;

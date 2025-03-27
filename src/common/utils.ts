@@ -135,6 +135,14 @@ export class Utils {
     });
   }
 
+  static getDateStringAtTimeZone(
+    date: Date | string,
+    locale: string,
+    timeZone: string,
+  ) {
+    return new Date(date).toLocaleDateString(locale, { timeZone });
+  }
+
   static async withCache<T>(
     cacheManager: Cache,
     key: string,

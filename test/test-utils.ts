@@ -8,9 +8,21 @@ export class TestUtils {
   static get dailyVariableStructure() {
     return {
       maxTemperature: expect.toBeOneOf([expect.any(Number), undefined]),
+      maxTemperatureDeliveryDate: expect.toBeOneOf([
+        expect.any(String),
+        undefined,
+      ]),
       minTemperature: expect.toBeOneOf([expect.any(Number), undefined]),
+      minTemperatureDeliveryDate: expect.toBeOneOf([
+        expect.any(String),
+        undefined,
+      ]),
       precipitationProbability: expect.toBeOneOf([
         expect.any(Number),
+        undefined,
+      ]),
+      precipitationProbabilityDeliveryDate: expect.toBeOneOf([
+        expect.any(String),
         undefined,
       ]),
       dateString: expect.any(String),
