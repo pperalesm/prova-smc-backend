@@ -1,5 +1,6 @@
 import {
   HttpException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -24,6 +25,10 @@ import {
   NUM_DAYS_WITH_VARIABLE_DATA,
   CATALAN_TIMEZONE,
   UTC_TIMEZONE,
+  LOCATIONS_CACHE_TTL,
+  VARIABLES_CACHE_TTL,
+  LOCATIONS_CACHE_KEY,
+  VARIABLES_CACHE_KEY,
 } from "./location.constants";
 import { Logger } from "@nestjs/common";
 import { ShortLocationDto } from "./dto/output/short-location.dto";
@@ -31,12 +36,17 @@ import { PageDto } from "../../common/dto/output/page.dto";
 import { PageMetaDto } from "../../common/dto/output/page-meta.dto";
 import { LocationDto } from "./dto/output/location.dto";
 import { Utils } from "../../common/utils";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import { Cache } from "cache-manager";
 
 @Injectable()
 export class LocationService {
   private logger = new Logger(LOCATION_LOGGER_CONTEXT);
 
-  constructor(private readonly httpService: HttpService) {}
+  constructor(
+    private readonly httpService: HttpService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+  ) {}
 
   async readMany(
     dto: ReadManyLocationsDto,
@@ -63,17 +73,24 @@ export class LocationService {
   }
 
   async getLocationsData(): Promise<LocationApiResponseInterface[]> {
-    const { data } = await firstValueFrom(
-      this.httpService
-        .get<LocationApiResponseInterface[]>(LOCATIONS_API_URL)
-        .pipe(
-          catchError((error: AxiosError) => {
-            throw this.handleLocationApiError(error);
-          }),
-        ),
-    );
+    return Utils.withCache(
+      this.cacheManager,
+      LOCATIONS_CACHE_KEY,
+      LOCATIONS_CACHE_TTL,
+      async () => {
+        const { data } = await firstValueFrom(
+          this.httpService
+            .get<LocationApiResponseInterface[]>(LOCATIONS_API_URL)
+            .pipe(
+              catchError((error: AxiosError) => {
+                throw this.handleLocationApiError(error);
+              }),
+            ),
+        );
 
-    return data;
+        return data;
+      },
+    );
   }
 
   async readOne(code: string): Promise<LocationDto> {
@@ -164,29 +181,36 @@ export class LocationService {
     value?: number;
     date?: string;
   }> {
-    const { data } = await firstValueFrom(
-      this.httpService
-        .get<LocationVariableApiResponseInterface>(
-          LOCATION_VARIABLE_API_URL.replaceAll(
-            API_VARIABLE_PLACEHOLDER,
-            variable,
-          ).replaceAll(API_DAY_PLACEHOLDER, day.toString()),
-        )
-        .pipe(
-          catchError((error: AxiosError) => {
-            throw this.handleLocationApiError(error);
-          }),
-        ),
-    );
+    return Utils.withCache(
+      this.cacheManager,
+      VARIABLES_CACHE_KEY + code + variable + day,
+      VARIABLES_CACHE_TTL,
+      async () => {
+        const { data } = await firstValueFrom(
+          this.httpService
+            .get<LocationVariableApiResponseInterface>(
+              LOCATION_VARIABLE_API_URL.replaceAll(
+                API_VARIABLE_PLACEHOLDER,
+                variable,
+              ).replaceAll(API_DAY_PLACEHOLDER, day.toString()),
+            )
+            .pipe(
+              catchError((error: AxiosError) => {
+                throw this.handleLocationApiError(error);
+              }),
+            ),
+        );
 
-    const locationData = data.municipis?.find(
-      (location) => location.codi === code,
-    );
+        const locationData = data.municipis?.find(
+          (location) => location.codi === code,
+        );
 
-    return {
-      value: locationData?.valors?.[0]?.valor,
-      date: locationData?.valors?.[0]?.data,
-    };
+        return {
+          value: locationData?.valors?.[0]?.valor,
+          date: locationData?.valors?.[0]?.data,
+        };
+      },
+    );
   }
 
   handleLocationApiError(error: AxiosError): HttpException {

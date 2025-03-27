@@ -4,7 +4,11 @@ export const LOCATIONS_URL = "locations";
 
 export const LOCATIONS_CACHE_TTL = 24 * 60 * 60 * 1000;
 
-export const LOCATION_CACHE_TTL = 60 * 1000;
+export const LOCATIONS_CACHE_KEY = "smc-s3-locations";
+
+export const VARIABLES_CACHE_TTL = 60 * 1000;
+
+export const VARIABLES_CACHE_KEY = "smc-s3-variables";
 
 export const LOCATION_CODE_PARAM = "code";
 

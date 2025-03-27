@@ -7,7 +7,7 @@ import { CacheInterceptor, CacheTTL } from "@nestjs/cache-manager";
 import {
   LOCATIONS_CACHE_TTL,
   LOCATIONS_URL,
-  LOCATION_CACHE_TTL,
+  VARIABLES_CACHE_TTL,
   LOCATION_CODE_PARAM,
 } from "./location.constants";
 import { LocationDto } from "./dto/output/location.dto";
@@ -27,7 +27,7 @@ export class LocationController {
 
   @Get(":" + LOCATION_CODE_PARAM)
   @UseInterceptors(CacheInterceptor)
-  @CacheTTL(LOCATION_CACHE_TTL)
+  @CacheTTL(VARIABLES_CACHE_TTL)
   async readOne(
     @Param(LOCATION_CODE_PARAM) code: string,
   ): Promise<LocationDto> {

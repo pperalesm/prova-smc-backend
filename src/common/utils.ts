@@ -1,4 +1,5 @@
 import * as bcrypt from "bcrypt";
+import { Cache } from "cache-manager";
 import * as crypto from "crypto";
 
 export class Utils {
@@ -132,5 +133,24 @@ export class Utils {
 
       return newDate;
     });
+  }
+
+  static async withCache<T>(
+    cacheManager: Cache,
+    key: string,
+    ttl: number,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const cachedValue = await cacheManager.get<T>(key);
+
+    if (cachedValue) {
+      return cachedValue;
+    }
+
+    const value = await fn();
+
+    await cacheManager.set(key, value, ttl);
+
+    return value;
   }
 }

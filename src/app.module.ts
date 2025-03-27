@@ -29,7 +29,9 @@ import { LocationModule } from "./modules/location/location.module";
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    CacheModule.register({ isGlobal: true }),
+    CacheModule.register({
+      isGlobal: true,
+    }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
