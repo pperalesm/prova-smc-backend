@@ -30,7 +30,7 @@ import { ShortLocationDto } from "./dto/output/short-location.dto";
 import { PageDto } from "../../common/dto/output/page.dto";
 import { PageMetaDto } from "../../common/dto/output/page-meta.dto";
 import { LocationDto } from "./dto/output/location.dto";
-import { Utils } from "src/common/utils";
+import { Utils } from "../../common/utils";
 
 @Injectable()
 export class LocationService {

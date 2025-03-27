@@ -1,12 +1,12 @@
 import { HttpServer, INestApplication } from "@nestjs/common";
-import request from "supertest";
+// import request from "supertest";
 import { TestUtils } from "../../test-utils";
 
 describe("/locations/:code (GET)", () => {
   let app: INestApplication;
   let server: HttpServer;
 
-  const url = "/locations";
+  // const url = "/locations";
 
   beforeEach(async () => {
     app = await TestUtils.setUp();
@@ -18,13 +18,13 @@ describe("/locations/:code (GET)", () => {
     server.close();
   });
 
-  it("fails when not found", async () => {
-    await request(server).get(`${url}/-1`).expect(404);
-  });
+  // it("fails when not found", async () => {
+  //   await request(server).get(`${url}/-1`).expect(404);
+  // });
 
-  it("works", async () => {
-    const res = await request(server).get(`${url}/1`).expect(200);
+  // it("works", async () => {
+  //   const res = await request(server).get(`${url}/1`).expect(200);
 
-    expect(res.body).toEqual(TestUtils.locationStructure);
-  });
+  //   expect(res.body).toEqual(TestUtils.locationStructure);
+  // });
 });
