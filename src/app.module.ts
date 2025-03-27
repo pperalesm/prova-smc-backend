@@ -21,6 +21,7 @@ import {
   THROTTLER_LIMIT,
   THROTTLER_TTL,
 } from "./app.constants";
+import { LocationModule } from "./modules/location/location.module";
 
 @Global()
 @Module({
@@ -45,6 +46,7 @@ import {
       }),
     }),
     TerminusModule,
+    LocationModule,
   ],
   controllers: [HealthController],
   providers: [
