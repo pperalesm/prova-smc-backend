@@ -72,27 +72,6 @@ export class LocationService {
     );
   }
 
-  async getLocationsData(): Promise<LocationApiResponseInterface[]> {
-    return Utils.withCache(
-      this.cacheManager,
-      LOCATIONS_CACHE_KEY,
-      LOCATIONS_CACHE_TTL,
-      async () => {
-        const { data } = await firstValueFrom(
-          this.httpService
-            .get<LocationApiResponseInterface[]>(LOCATIONS_API_URL)
-            .pipe(
-              catchError((error: AxiosError) => {
-                throw this.handleLocationApiError(error);
-              }),
-            ),
-        );
-
-        return data;
-      },
-    );
-  }
-
   async readOne(code: string): Promise<LocationDto> {
     const [
       locationsData,
@@ -115,62 +94,104 @@ export class LocationService {
       throw new NotFoundException(LOCATION_NOT_FOUND_MESSAGE);
     }
 
-    const dailyVariables = Utils.getNextXDates(
+    const dailyVariables: {
+      dateString: string;
+      maxTemperature?: number;
+      minTemperature?: number;
+      precipitationProbability?: number;
+    }[] = [];
+
+    const dateToDayNumber = Utils.getNextXDates(
       new Date(),
       NUM_DAYS_WITH_VARIABLE_DATA,
-    ).map((date, i) => {
+    ).reduce((result, date, i) => {
       const dateString = date.toLocaleDateString(CATALAN_LOCALE, {
         timeZone: CATALAN_TIMEZONE,
       });
 
-      // Will return false if S3 data is not updated at 00:00 Catalan Time
-      const isSameDate = (data: { value?: number; date?: string }[]) => {
-        return (
-          data[i]?.date &&
-          dateString ===
-            new Date(data[i].date!).toLocaleDateString(CATALAN_LOCALE, {
-              timeZone: UTC_TIMEZONE,
-            })
-        );
-      };
+      dailyVariables.push({ dateString });
 
-      let maxTemperature;
-      let minTemperature;
-      let precipitationProbability;
+      result.set(dateString, i + 1);
 
-      if (isSameDate(maxTemperatureData)) {
-        maxTemperature = maxTemperatureData[i]?.value;
-      }
+      return result;
+    }, new Map<string, number>());
 
-      if (isSameDate(minTemperatureData)) {
-        minTemperature = minTemperatureData[i]?.value;
-      }
+    this.getValuesFromVariableData(
+      LocationVariableEnum.MAX_TEMPERATURE,
+      maxTemperatureData,
+      dateToDayNumber,
+      dailyVariables,
+    );
 
-      if (isSameDate(precipitationProbabilityData)) {
-        precipitationProbability = precipitationProbabilityData[i]?.value;
-      }
+    this.getValuesFromVariableData(
+      LocationVariableEnum.MIN_TEMPERATURE,
+      minTemperatureData,
+      dateToDayNumber,
+      dailyVariables,
+    );
 
-      return {
-        maxTemperature,
-        minTemperature,
-        precipitationProbability,
-        dateString,
-      };
-    });
+    this.getValuesFromVariableData(
+      LocationVariableEnum.PRECIPITATION_PROBABILITY,
+      precipitationProbabilityData,
+      dateToDayNumber,
+      dailyVariables,
+    );
 
     return new LocationDto(code, location.nom, dailyVariables);
+  }
+
+  getValuesFromVariableData(
+    variable: LocationVariableEnum,
+    variableData: { value?: number; date?: string }[],
+    dateToDayNumber: Map<string, number>,
+    dailyVariables: {
+      dateString: string;
+      maxTemperature?: number;
+      minTemperature?: number;
+      precipitationProbability?: number;
+    }[],
+  ): void {
+    for (const item of variableData) {
+      if (!item.date) {
+        continue;
+      }
+
+      const dateString = new Date(item.date).toLocaleDateString(
+        CATALAN_LOCALE,
+        {
+          timeZone: UTC_TIMEZONE,
+        },
+      );
+
+      if (!dateToDayNumber.has(dateString)) {
+        continue;
+      }
+
+      const dayNumber = dateToDayNumber.get(dateString)!;
+
+      switch (variable) {
+        case LocationVariableEnum.MAX_TEMPERATURE:
+          dailyVariables[dayNumber - 1].maxTemperature = item.value;
+          break;
+        case LocationVariableEnum.MIN_TEMPERATURE:
+          dailyVariables[dayNumber - 1].minTemperature = item.value;
+          break;
+        case LocationVariableEnum.PRECIPITATION_PROBABILITY:
+          dailyVariables[dayNumber - 1].precipitationProbability = item.value;
+          break;
+      }
+    }
   }
 
   async getVariableData(
     code: string,
     variable: LocationVariableEnum,
   ): Promise<{ value?: number; date?: string }[]> {
-    const promises = Array.from(
-      { length: NUM_DAYS_WITH_VARIABLE_DATA },
-      (_, i) => this.getVariableDataForDay(code, i + 1, variable),
+    return Promise.all(
+      Array.from({ length: NUM_DAYS_WITH_VARIABLE_DATA }, (_, i) =>
+        this.getVariableDataForDay(code, i + 1, variable),
+      ),
     );
-
-    return Promise.all(promises);
   }
 
   async getVariableDataForDay(
@@ -209,6 +230,27 @@ export class LocationService {
           value: locationData?.valors?.[0]?.valor,
           date: locationData?.valors?.[0]?.data,
         };
+      },
+    );
+  }
+
+  async getLocationsData(): Promise<LocationApiResponseInterface[]> {
+    return Utils.withCache(
+      this.cacheManager,
+      LOCATIONS_CACHE_KEY,
+      LOCATIONS_CACHE_TTL,
+      async () => {
+        const { data } = await firstValueFrom(
+          this.httpService
+            .get<LocationApiResponseInterface[]>(LOCATIONS_API_URL)
+            .pipe(
+              catchError((error: AxiosError) => {
+                throw this.handleLocationApiError(error);
+              }),
+            ),
+        );
+
+        return data;
       },
     );
   }
