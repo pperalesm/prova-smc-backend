@@ -63,7 +63,9 @@ export class LocationService {
         location.codi &&
         location.nom &&
         (!dto.name ||
-          location.nom.includes(dto.name.toLocaleLowerCase(CATALAN_LOCALE))),
+          location.nom
+            .toLocaleLowerCase(CATALAN_LOCALE)
+            .includes(dto.name.toLocaleLowerCase(CATALAN_LOCALE))),
     );
 
     const paginatedLocations = filteredLocations
@@ -192,9 +194,9 @@ export class LocationService {
     day: number,
     variableBucket: VariableBucketEnum,
   ): Promise<VariableDataInterface> {
-    return Utils.withCache(
+    const allLocationsData = await Utils.withCache(
       this.cacheManager,
-      VARIABLES_CACHE_KEY + code + variableBucket + day,
+      VARIABLES_CACHE_KEY + variableBucket + day,
       VARIABLES_CACHE_TTL,
       async () => {
         const { data } = await firstValueFrom(
@@ -212,17 +214,19 @@ export class LocationService {
             ),
         );
 
-        const locationData = data.municipis?.find(
-          (location) => location.codi === code,
-        );
-
-        return {
-          value: locationData?.valors?.[0]?.valor,
-          date: locationData?.valors?.[0]?.data,
-          deliveryDate: data.dataSortida,
-        };
+        return data;
       },
     );
+
+    const locationData = allLocationsData.municipis?.find(
+      (location) => location.codi === code,
+    );
+
+    return {
+      value: locationData?.valors?.[0]?.valor,
+      date: locationData?.valors?.[0]?.data,
+      deliveryDate: allLocationsData.dataSortida,
+    };
   }
 
   async getLocationsData(): Promise<LocationApiResponseInterface[]> {

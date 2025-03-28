@@ -31,7 +31,7 @@ export interface VariableDataInterface {
   deliveryDate?: string;
 }
 
-export type DailyVariableInterface = {
+export interface DailyVariableInterface {
   dateString: string;
   [key: string]: string | number | undefined;
-};
+}
