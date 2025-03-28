@@ -167,10 +167,12 @@ export class LocationService {
         dailyVariable[deliveryDateField] !== todayDateString &&
         itemDeliveryDateString === todayDateString;
 
-      if (dailyVariable[valueField] == undefined || isAReliableUpdate) {
-        dailyVariable[valueField] = item.value;
-        dailyVariable[deliveryDateField] = itemDeliveryDateString;
+      if (dailyVariable[valueField] !== undefined && !isAReliableUpdate) {
+        continue;
       }
+
+      dailyVariable[valueField] = item.value;
+      dailyVariable[deliveryDateField] = itemDeliveryDateString;
     }
   }
 
